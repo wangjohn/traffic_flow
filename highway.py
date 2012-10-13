@@ -65,25 +65,50 @@ class Highway:
 
     def next_time_step(self):
         self.time += 1
+        # check if anyone needs to switch lanes
         for x in xrange(len(self.road)):
-            for spot_num in xrange(len(position)):
+            for spot_num in xrange(self.num_lanes):
                 # check how far up the car can move 
                 current_vehicle = self.road[x][spot_num] 
-                next_vehicle_position = self.get_next_vehicle_position(x, spot_num)
-                if next_vehicle_position:
-                    # if there is a vehicle in front, we move up to the follow distance of the vehicle, or change lanes probabilistically
-                    should_switch = current_vehicle.should_switch_lanes(x, next_vehicle_position[0])
+                if current_vehicle.is_vehicle:
+                    next_vehicle_position = self.get_next_vehicle_position(x, spot_num)
+                    if next_vehicle_position and current_vehicle.should_switch_lanes(x, next_vehicle_position[0]):
+                        # if there is a vehicle in front, we move up to the follow distance of the vehicle, or change lanes probabilistically
+                        self.switch_lanes((x, spot_num))
+
+        # move all of the cars up by their respective speeds, making sure to slow them down so they are slower than the guy ahead
+        # we start at the back to simulate speed pileups
+        new_vehicles_hash = {}
+        for x in xrange(len(self.road)):
+            for y in xrange(self.num_lanes):
+                current_vehicle = self.road[x][y]
+                if current_vehicle.is_vehicle:
+                    next_vehicle_position = self.get_next_vehicle_position(x, y)
+                    # move the vehicle up, making sure that we keep follow distance in place
+                    if (next_vehicle_position[0] - x) < current_vehicle.follow_distance + current_vehicle.speed:
+                        new_x = next_vehicle_position[0] - current_vehicle.follow_distance
+                        # slow down the car if necessary
+                        if next_vehicle.speed > current_vehicle.speed:
+                            current_vehicle.speed = next_vehicle.speed
+                    else:
+                        new_x = x + current_vehicle.speed
+
+                    # move the position of the vehicle
+                    new_vehicles_hash[(new_x,y)] = current_vehicle
+
 
     def switch_lanes(self, vehicle_position):
         (x, y) = vehicle_position
-        # try switching to the left lane
-        if y+1 < self.num_lanes:
+        follow_distance = self.vehicles[vehicle_position].follow_distance
+        # try switching to the left lane, make sure we don't run into a car ahead of us
+        if y+1 < self.num_lanes and (self.get_next_vehicle_position(x,y+1)[0] - x) > follow_distance:
             # check if there is someone behind
             previous_vehicle_position = self.get_next_vehicle_position(x, y+1, False)
-            previous_vehicle = self.vehicles[previous_vehicle_position]
-            # 
-        elif y-1 >= 0:
+            self.make_lane_switch(vehicle_position, previous_vehicle_position, y+1)
+        # now try switching into the right lane
+        elif y-1 >= 0 and (self.get_next_vehicle_position(x,y-1)[0] - x) > follow_distance:
             previous_vehicle_position = self.get_next_vehicle_position(x, y-1, False)
+            self.make_lane_switch(vehicle_position, previous_vehicle_position, y-1)
 
     def make_lane_switch(self, switching_vehicle_position, incoming_vehicle_position, new_lane):
         switching_vehicle = self.vehicles[switching_vehicle_position]
@@ -95,9 +120,10 @@ class Highway:
                 # if the incoming vehicle is slower than the switching vehicle, we only care to do anything when the distance is too close
                 if distance < incoming_vehicle.follow_distance:
                     # incoming vehicle needs to slow down to allow appropriate follow distance
-                    incoming_vehicle.speed = incoming_vehicle.follow_distance - distance
-            elif distance < incoming_vehicle_speed - switching_vehicle.speed:
+                    incoming_vehicle.speed -= (incoming_vehicle.follow_distance - distance)
+            elif distance - incoming_vehicle.follow_distance < incoming_vehicle.speed - switching_vehicle.speed:
                 # going to crash, definitely need to try to slow down and switch
+                incoming_vehicle.speed -= (incoming_vehicle.speed - switching_vehicle.speed - (distance - incoming_vehicle.follow_distance))
 
         # switch the lane
         self.vehicles[(swiching_vehicle_position[0], new_lane)] = switching_vehicle
@@ -106,22 +132,23 @@ class Highway:
 
 
 class LaneOccupier(object):
-	def __init__(self, length, width, is_accident=False):
+	def __init__(self, length, width, is_accident=False, is_vehicle=True):
 		self.length = length
 		self.width = width
 		self.is_accident = is_accident
+        self.is_vehicle = is_vehicle
 
 	def is_accident(self):
 		self.is_accident
 
 class UnoccupiedLane(LaneOccupier):
     def __init__(self):
-        super(LaneOccupier, self).__init__(1, 1, False)
+        super(LaneOccupier, self).__init__(1, 1, False, False)
 
 
 class Accident(LaneOccupier):
 	def __init__(self, length, width, time_left):
-		super(Accident, self).__init__(length, width, True)
+		super(Accident, self).__init__(length, width, True, False)
 		self.time_left = time_left
 
 	def decrement_time_left(self):
@@ -129,7 +156,7 @@ class Accident(LaneOccupier):
 
 class Vehicle(LaneOccupier):
 	def __init__(self, size, speed, follow_distance = 10):
-		super(Vehicle, self).__init__(size, 1, False)
+		super(Vehicle, self).__init__(size, 1, False, True)
 		self.size = size
         self.speed = speed
         self.follow_distance = follow_distance
