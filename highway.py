@@ -78,7 +78,6 @@ class Highway:
 
         # move all of the cars up by their respective speeds, making sure to slow them down so they are slower than the guy ahead
         # we start at the back to simulate speed pileups
-        new_vehicles_hash = {}
         for x in xrange(len(self.road)):
             for y in xrange(self.num_lanes):
                 current_vehicle = self.road[x][y]
@@ -94,7 +93,7 @@ class Highway:
                         new_x = x + current_vehicle.speed
 
                     # move the position of the vehicle
-                    new_vehicles_hash[(new_x,y)] = current_vehicle
+                    self.make_position_switch((x,y),(new_x,y))
 
 
     def switch_lanes(self, vehicle_position):
@@ -126,8 +125,19 @@ class Highway:
                 incoming_vehicle.speed -= (incoming_vehicle.speed - switching_vehicle.speed - (distance - incoming_vehicle.follow_distance))
 
         # switch the lane
-        self.vehicles[(swiching_vehicle_position[0], new_lane)] = switching_vehicle
-        self.vehicles[switching_vehicle_position] = UnoccupiedLane()
+        self.make_position_switch(switching_vehicle_position, (switching_vehicle_position[0], new_lane))
+
+    def make_position_switch(self, old_position, new_position):
+        vehicle = self.vehicles[old_position]
+        unoccupied_lane = UnoccupiedLane()
+
+        # move the vehicle in the vehicles hash
+        self.vehicles[new_position] = vehicle
+        self.vehicles[old_position] = unoccupied_lane
+
+        # move the vehicle in the road list of lists
+        self.road[old_position[0]][old_position[1]] = unoccupied_lane
+        self.road[new_position[0]][new_position[1]] = vehicle
 
 
 
